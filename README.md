@@ -25,4 +25,4 @@ npm run check:no-ai
 
 ## Deploy
 
-Push to `main`. Vercel builds it. The Vercel project needs `MONGO_URI` and `SESSION_SECRET`.
+Push to `main`. Vercel builds it. The Vercel project needs `MONGO_URI`, `SESSION_SECRET` and `APP_URL`.

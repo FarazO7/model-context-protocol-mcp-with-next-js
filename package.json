@@ -14,10 +14,13 @@
     "check:no-ai": "bash scripts/check-no-ai.sh"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "mcp-handler": "^2.3.0",
     "mongodb": "^7.8.0",
     "next": "16.4.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

@@ -115,7 +115,7 @@ Endpoint: `https://<app>/api/w/<mcp_key>/mcp` (Streamable HTTP). The key in the 
 - Next.js (App Router) and TypeScript
 - Tailwind and shadcn/ui
 - MongoDB Atlas with the official `mongodb` driver (no ORM)
-- `mcp-handler` with `@modelcontextprotocol/sdk` 1.26.0 or later, plus zod
+- `mcp-handler` 2.x with `@modelcontextprotocol/server` 2.x (MCP SDK v2), plus zod 4
 - Node scrypt password hashes with a signed session cookie
 - react-markdown with no raw HTML
 - Vitest

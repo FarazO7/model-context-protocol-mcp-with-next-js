@@ -12,20 +12,27 @@ export function istDate(at: Date): string {
 
 export const todayIST = () => istDate(new Date());
 
+/** A moment as an IST timestamp, for example "2026-11-04T16:20:00+05:30". */
+export function istTimestamp(at: Date): string {
+  return `${new Date(at.getTime() + IST_OFFSET_MS).toISOString().slice(0, 19)}+05:30`;
+}
+
 export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
-export type Status =
-  | "draft"
-  | "awaiting_acceptance"
-  | "objection_open"
-  | "accepted"
-  | "deemed_accepted"
-  | "invoiced"
-  | "paid";
+export const STATUSES = [
+  "draft",
+  "awaiting_acceptance",
+  "objection_open",
+  "accepted",
+  "deemed_accepted",
+  "invoiced",
+  "paid",
+] as const;
+export type Status = (typeof STATUSES)[number];
 
 export type ClockSettings = Pick<Workspace, "objection_window_days" | "agreed_payment_days" | "written_agreement">;
 export type ClockMilestone = Pick<Milestone, "delivered_on" | "client_accepted_at" | "invoiced_on" | "paid_on">;

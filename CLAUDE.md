@@ -17,7 +17,7 @@ The customer's own Claude reads contracts and delivery notes and writes acceptan
    - inputs validated with zod; errors returned as plain sentences
    - every response includes the relevant app URL
    - never return secrets, session data or another workspace's data
-5. **MCP library.** Use `mcp-handler` with `@modelcontextprotocol/sdk` 1.26.0 or later. Streamable HTTP only: no SSE, no Redis.
+5. **MCP library.** Use `mcp-handler` 2.x with `@modelcontextprotocol/server` 2.x (MCP SDK v2) and zod 4. Streamable HTTP only, stateless: 2.x has no SSE and no Redis.
 6. **Review links.** Client review links use 32 random bytes (base64url). The review page needs no login and shows only that milestone.
 7. **Markdown.** Render packs, objections and resolutions with react-markdown and no raw HTML.
 8. **Money and dates.** Money is whole rupees in integer columns. Dates are calendar dates in Asia/Kolkata.
@@ -37,9 +37,10 @@ The customer's own Claude reads contracts and delivery notes and writes acceptan
 app/(app)/dashboard, milestones/[id], connect, about
 app/login
 app/r/[token]                         public client review page
-app/api/w/[key]/[transport]/route.ts  MCP endpoint; workspace chosen by key
+app/api/w/[key]/mcp/route.ts          MCP endpoint; workspace chosen by key
 lib/db/schema.ts, lib/db/index.ts
 lib/rules.ts, lib/rules.test.ts
+lib/milestones.ts                     workspace-scoped reads and writes shared by MCP tools and pages
 lib/auth.ts, lib/crypto.ts, lib/events.ts, lib/mcp/tools.ts
 scripts/seed.ts, scripts/check-no-ai.sh
 demo/                                 sample inputs for testing and the video; not used by the app
@@ -53,8 +54,10 @@ npm test
 npm run db:push                       # create MongoDB indexes (safe to rerun)
 npm run db:seed                       # reset the fictional demo workspace
 npm run check:no-ai
-npx @modelcontextprotocol/inspector   # point it at http://localhost:3000/api/w/<key>/mcp
+npx @modelcontextprotocol/inspector --cli --transport http --server-url http://localhost:3000/api/w/<key>/mcp --method tools/list
 ```
+
+The Inspector CLI also takes `--method tools/call --tool-name <name> --tool-args-json '<json>'` and `--protocol-era modern|legacy`.
 
 Deploy by pushing to main (Vercel Git integration) or with `vercel --prod`.
 Repo: `FarazO7/model-context-protocol-mcp-with-next-js` (private). Production: https://model-context-protocol-mcp-with-nex-eight-blush.vercel.app
@@ -65,12 +68,12 @@ Next.js 16 runs with Cache Components off (`next.config.ts`): every page renders
 
 `MONGO_URI`, `SESSION_SECRET`, `APP_URL`, `SEED_USER_EMAIL`, `SEED_USER_PASSWORD`, `SEED_MCP_KEY`
 
-## MCP route sketch (check against the mcp-handler README)
+## MCP route
 
-In `app/api/w/[key]/[transport]/route.ts`:
+`app/api/w/[key]/mcp/route.ts` (mcp-handler 2.x ignores the path, so there is no `basePath` or `[transport]` segment):
 
 1. Read `key` from params and look up the workspace; return 401 if there is none.
-2. Create the handler with `createMcpHandler((server) => registerTools(server, workspace), {}, { basePath: \`/api/w/${key}\`, disableSse: true })`.
-3. Return `handler(req)`, exporting GET, POST and DELETE.
+2. Build a handler per request: `createMcpHandler((server) => registerTools(server, workspace), { serverInfo, instructions })(req)`.
+3. Export it as GET, POST and DELETE.
 
-If a dynamic basePath fights the library, fall back to `/api/mcp?key=<key>` and confirm Claude keeps the query string when connecting.
+Tools throw `UserError` (from `lib/milestones.ts`) for problems Claude can fix; its message is shown as written. Any other error is logged and replaced with a generic sentence.

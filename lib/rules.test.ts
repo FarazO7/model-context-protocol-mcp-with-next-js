@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isOutsideWindow, istDate, milestoneClock, type ClockMilestone, type ClockObjection } from "./rules";
+import {
+  addDays,
+  isOutsideWindow,
+  istDate,
+  istTimestamp,
+  milestoneClock,
+  type ClockMilestone,
+  type ClockObjection,
+} from "./rules";
 
 const settings = { objection_window_days: 15, agreed_payment_days: 30, written_agreement: true };
 const ist = (date: string, time = "11:00") => new Date(`${date}T${time}:00+05:30`);
@@ -17,6 +25,9 @@ describe("istDate", () => {
   it("is still the 5th at 23:59 IST", () => expect(istDate(new Date("2026-11-05T18:29:59Z"))).toBe("2026-11-05"));
   it("turns to the 6th at midnight IST", () => expect(istDate(new Date("2026-11-05T18:30:00Z"))).toBe("2026-11-06"));
 });
+
+it("istTimestamp shows India time with its offset", () =>
+  expect(istTimestamp(new Date("2026-11-04T10:50:00Z"))).toBe("2026-11-04T16:20:00+05:30"));
 
 describe("addDays", () => {
   it("crosses a month end", () => expect(addDays("2026-11-25", 10)).toBe("2026-12-05"));
