@@ -45,7 +45,8 @@ export default async function DashboardPage() {
           const items = rows.filter((r) => col.statuses.includes(r.clock.status));
           const total = items.reduce((sum, r) => sum + r.milestone.amount_inr, 0);
           return (
-            <section key={col.title} className="rounded-lg bg-neutral-50 p-3">
+            // Empty columns only take up room on a phone.
+            <section key={col.title} className={`rounded-lg bg-neutral-50 p-3 ${items.length ? "" : "hidden sm:block"}`}>
               <h2 className="text-sm font-semibold">
                 {col.title} <span className="font-normal text-neutral-500">({items.length})</span>
               </h2>

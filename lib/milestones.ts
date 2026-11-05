@@ -1,11 +1,12 @@
 import { ObjectId } from "mongodb";
 import { db } from "@/lib/db";
 import { newToken } from "@/lib/crypto";
-import type { Actor, Client, Engagement, Milestone, Workspace } from "@/lib/db/schema";
+import type { Actor, Client, Engagement, Milestone, Objection, Workspace } from "@/lib/db/schema";
 import { withoutNumber } from "@/lib/edits";
 import { logEvents } from "@/lib/events";
 import { day } from "@/lib/format";
 import {
+  billingProblem,
   clientCanRespond,
   isOutsideWindow,
   istDate,
@@ -30,11 +31,14 @@ function appUrl(path: string): string {
 export const dashboardUrl = () => appUrl("/dashboard");
 export const milestoneUrl = (id: ObjectId) => appUrl(`/milestones/${id.toHexString()}`);
 export const reviewUrl = (token: string) => appUrl(`/r/${token}`);
+/** The workspace's secret connector URL. Only the logged-in Connect page shows it. */
+export const connectorUrl = (ws: Workspace) => appUrl(`/api/w/${ws.mcp_key}/mcp`);
 
 export interface MilestoneRow {
   milestone: Milestone;
   engagement: Engagement;
   client: Client;
+  objections: Objection[];
   clock: Clock;
 }
 
@@ -47,7 +51,7 @@ export async function listMilestones(ws: Workspace): Promise<MilestoneRow[]> {
     c.clients.find(scope).toArray(),
     c.engagements.find(scope).toArray(),
     c.milestones.find(scope).toArray(),
-    c.objections.find(scope).toArray(),
+    c.objections.find(scope).sort({ raised_at: 1 }).toArray(),
   ]);
   const clientById = new Map(clients.map((x) => [hex(x._id), x]));
   const engagementById = new Map(engagements.map((x) => [hex(x._id), x]));
@@ -59,7 +63,7 @@ export async function listMilestones(ws: Workspace): Promise<MilestoneRow[]> {
       const client = engagement && clientById.get(hex(engagement.client_id));
       if (!engagement || !client) return [];
       const own = objections.filter((o) => o.milestone_id.equals(milestone._id));
-      return [{ milestone, engagement, client, clock: milestoneClock(milestone, own, ws, today) }];
+      return [{ milestone, engagement, client, objections: own, clock: milestoneClock(milestone, own, ws, today) }];
     })
     .sort(
       (a, b) =>
@@ -162,14 +166,19 @@ export async function createEngagement(ws: Workspace, input: NewEngagement, acto
 }
 
 type Editable = Pick<Milestone, "title" | "description" | "amount_inr" | "criteria" | "pack_md" | "evidence">;
+type Billing = { invoiced_on?: string; paid_on?: string };
 
-/** Saves the fields that changed and logs one event naming them. Returns false when nothing changed. */
-export async function updateMilestone(ws: Workspace, id: string, patch: Partial<Editable>, actor: Actor) {
+/**
+ * Saves the fields that changed and logs what changed. Invoice and payment dates follow billingProblem and get
+ * their own events. Returns false when nothing changed.
+ */
+export async function updateMilestone(ws: Workspace, id: string, patch: Partial<Editable> & Billing, actor: Actor) {
   const found = await getMilestone(ws, id);
   if (!found) throw new UserError("That milestone isn't in this workspace.");
   const m = found.milestone;
-  const changed = (Object.keys(patch) as (keyof Editable)[]).filter(
-    (k) => JSON.stringify(m[k]) !== JSON.stringify(patch[k]),
+  // Skipping undefined matters: the driver would store it as null.
+  const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter(
+    (k) => patch[k] !== undefined && JSON.stringify(m[k]) !== JSON.stringify(patch[k]),
   );
   if (!changed.length) return false;
 
@@ -178,32 +187,27 @@ export async function updateMilestone(ws: Workspace, id: string, patch: Partial<
     const named = found.objections.flatMap((o) => o.criteria_ids).find((cid) => !kept.has(cid));
     if (named) throw new UserError(`Criterion (${named}) is named in an objection, so it can't be removed.`);
   }
+  const set = Object.fromEntries(changed.map((k) => [k, patch[k]])) as Partial<Editable> & Billing;
+  const problem = billingProblem(m, found.clock.legal_acceptance_date, set, todayIST());
+  if (problem) throw new UserError(problem);
 
-  const set = Object.fromEntries(changed.map((k) => [k, patch[k]])) as Partial<Editable>;
   await db().milestones.updateOne({ _id: m._id, workspace_id: ws._id }, { $set: { ...set, updated_at: new Date() } });
+  const edits = changed.filter((k) => k !== "invoiced_on" && k !== "paid_on");
   const changes = Object.fromEntries(
-    changed.map((k) => [k, k === "amount_inr" || k === "title" ? { from: m[k], to: patch[k] } : true]),
+    edits.map((k) => [k, k === "amount_inr" || k === "title" ? { from: m[k], to: patch[k] } : true]),
   );
-  await logEvents([{ workspace_id: ws._id, milestone_id: m._id, actor, type: "milestone_updated", data: { changes } }]);
+  const base = { workspace_id: ws._id, milestone_id: m._id, actor };
+  await logEvents([
+    ...(edits.length ? [{ ...base, type: "milestone_updated", data: { changes } }] : []),
+    ...(set.invoiced_on ? [{ ...base, type: "marked_invoiced", data: { invoiced_on: set.invoiced_on } }] : []),
+    ...(set.paid_on ? [{ ...base, type: "marked_paid", data: { paid_on: set.paid_on } }] : []),
+  ]);
   return true;
 }
 
-/** Records today (IST) as the invoiced or paid date. Invoicing needs acceptance; payment needs an invoice. */
-export async function markMilestone(ws: Workspace, id: string, what: "invoiced" | "paid", actor: Actor) {
-  const found = await getMilestone(ws, id);
-  if (!found) throw new UserError("That milestone isn't in this workspace.");
-  const { status } = found.clock;
-  if (what === "invoiced" && status !== "accepted" && status !== "deemed_accepted") {
-    throw new UserError("Only an accepted milestone can be marked invoiced.");
-  }
-  if (what === "paid" && status !== "invoiced") throw new UserError("Mark the milestone invoiced before marking it paid.");
-
-  const field = what === "invoiced" ? "invoiced_on" : "paid_on";
-  const today = todayIST();
-  const _id = found.milestone._id;
-  await db().milestones.updateOne({ _id, workspace_id: ws._id }, { $set: { [field]: today, updated_at: new Date() } });
-  await logEvents([{ workspace_id: ws._id, milestone_id: _id, actor, type: `marked_${what}`, data: { [field]: today } }]);
-}
+/** The Mark invoiced and Mark paid buttons: today's date (IST), under the same rule as update_milestone. */
+export const markMilestone = (ws: Workspace, id: string, what: "invoiced" | "paid", actor: Actor) =>
+  updateMilestone(ws, id, what === "invoiced" ? { invoiced_on: todayIST() } : { paid_on: todayIST() }, actor);
 
 type Evidence = Milestone["evidence"][number];
 const missing = (id: string) =>

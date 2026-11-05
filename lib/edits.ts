@@ -46,6 +46,34 @@ export function reviseCriteria(
   return { ok: list };
 }
 
+/**
+ * Claude's full list for update_milestone, in order. An item with a letter edits that criterion, an item without one
+ * is added with the next free letter, and a criterion left out is removed. Texts are checked by the tool's schema.
+ */
+export function replaceCriteria(current: Criterion[], items: { id?: string; text: string }[]): Result<Criterion[]> {
+  const known = new Set(current.map((c) => c.id));
+  const seen = new Set<string>();
+  // shortcut: as in reviseCriteria, a letter removed in an earlier save can be reused.
+  let highest = Math.max(96, ...current.map((c) => c.id.charCodeAt(0)));
+  const list: Criterion[] = [];
+  for (const { id, text } of items) {
+    if (id === undefined) {
+      if (highest >= 122) return { error: "A milestone can have at most 26 criteria." };
+      highest += 1;
+      list.push({ id: String.fromCharCode(highest), text });
+    } else if (!known.has(id)) {
+      return { error: `There is no criterion (${id}) on this milestone. Leave id out to add a new criterion.` };
+    } else if (seen.has(id)) {
+      return { error: `Criterion (${id}) is in the list twice. List each letter once.` };
+    } else {
+      seen.add(id);
+      list.push({ id, text });
+    }
+  }
+  if (!list.length) return { error: "Keep at least one acceptance criterion." };
+  return { ok: list };
+}
+
 /** Reads evidence typed one per line as "Label | https://link". Only http and https links are allowed. */
 export function parseEvidence(text: string): Result<Evidence[]> {
   const out: Evidence[] = [];

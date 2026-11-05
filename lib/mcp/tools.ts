@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Workspace } from "@/lib/db/schema";
-import { day } from "@/lib/format";
+import { replaceCriteria, withoutNumber } from "@/lib/edits";
+import { chip, day } from "@/lib/format";
 import {
   createEngagement,
   dashboardUrl,
@@ -11,10 +12,11 @@ import {
   resolveObjection,
   reviewUrl,
   submitForAcceptance,
+  updateMilestone,
   UserError,
   type MilestoneRow,
 } from "@/lib/milestones";
-import { istTimestamp, STATUSES, todayIST, type Clock } from "@/lib/rules";
+import { istTimestamp, pipeline, STATUSES, todayIST, type Clock } from "@/lib/rules";
 
 export const instructions = (ws: Workspace) =>
   [
@@ -50,6 +52,17 @@ const milestoneId = z
   .regex(/^[a-f0-9]{24}$/i, { error: "milestone_id is the 24-character id that list_milestones returns." })
   .describe("The id from list_milestones.");
 
+const notFound = (id: string) =>
+  new UserError(`There is no milestone ${id} in this workspace. Call list_milestones to find the right id.`);
+
+const amount = z
+  .number({ error: "amount_inr must be a number of rupees." })
+  .int({ error: "amount_inr must be whole rupees, with no paise." })
+  .positive({ error: "amount_inr must be more than zero." })
+  .max(1_000_000_000);
+
+const isoDate = (field: string) => z.iso.date({ error: `${field} must be a date like 2026-11-06.` });
+
 const evidenceInput = z
   .array(
     z.object({
@@ -75,6 +88,7 @@ const summary = (r: MilestoneRow) => ({
   milestone: `M${r.milestone.seq}: ${r.milestone.title}`,
   amount_inr: r.milestone.amount_inr,
   status: r.clock.status,
+  deadline: chip(r.clock, todayIST()),
   overdue: r.clock.overdue,
   delivered_on: r.milestone.delivered_on,
   objection_deadline: r.clock.window_end,
@@ -108,12 +122,7 @@ export function registerTools(server: McpServer, ws: Workspace) {
                 "Milestone name without its number, for example Store finder (iOS and Android). ProofFlow numbers milestones itself.",
               ),
               description: z.string().trim().max(2000).describe("The deliverables for this stage, in a sentence or two."),
-              amount_inr: z
-                .number({ error: "amount_inr must be a number of rupees." })
-                .int({ error: "amount_inr must be whole rupees, with no paise." })
-                .positive({ error: "amount_inr must be more than zero." })
-                .max(1_000_000_000)
-                .describe("Fee in whole rupees excluding GST, exactly as in the contract. ₹2,40,000 is 240000."),
+              amount_inr: amount.describe("Fee in whole rupees excluding GST, exactly as in the contract. ₹2,40,000 is 240000."),
               acceptance_criteria: z
                 .array(text(500))
                 .min(1, { error: "Each milestone needs at least one acceptance criterion." })
@@ -192,9 +201,7 @@ export function registerTools(server: McpServer, ws: Workspace) {
     async ({ milestone_id }) =>
       run("get_milestone", async () => {
         const found = await getMilestone(ws, milestone_id);
-        if (!found) {
-          throw new UserError(`There is no milestone ${milestone_id} in this workspace. Call list_milestones to find the right id.`);
-        }
+        if (!found) throw notFound(milestone_id);
         const { milestone: m, engagement, client, objections, events } = found;
         return {
           today: todayIST(),
@@ -236,9 +243,7 @@ export function registerTools(server: McpServer, ws: Workspace) {
         "Give the user the review link to send to the client.",
       inputSchema: z.object({
         milestone_id: milestoneId,
-        delivered_on: z.iso
-          .date({ error: "delivered_on must be a date like 2026-11-06." })
-          .describe("The date the work was handed over, in India time (YYYY-MM-DD)."),
+        delivered_on: isoDate("delivered_on").describe("The date the work was handed over, in India time (YYYY-MM-DD)."),
         acceptance_pack_markdown: markdown("acceptance pack").describe(
           "Markdown with one section per criterion, headed by its letter, for example ### (b) In-stock badge.",
         ),
@@ -297,6 +302,123 @@ export function registerTools(server: McpServer, ws: Workspace) {
           client_review_url: m.review_token ? reviewUrl(m.review_token) : null,
           url: milestoneUrl(m._id),
           message: `The objection is resolved and the window restarts today. Send the client the same review link. ${acceptedFrom(clock)}`,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "update_milestone",
+    {
+      title: "Update milestone",
+      description:
+        "Use to change a milestone's title, description, amount or acceptance criteria, or to record the date it was invoiced or paid. " +
+        "Call get_milestone first so you have the current criteria and their letters. Send only the fields that change. " +
+        "Never change an amount unless the user or the contract says so. Give the user the returned link.",
+      inputSchema: z.object({
+        milestone_id: milestoneId,
+        changes: z
+          .object({
+            title: text(200).optional().describe("New name, without its number."),
+            description: z.string().trim().max(2000).optional().describe("The deliverables for this stage, in a sentence or two."),
+            amount_inr: amount.optional().describe("New fee in whole rupees excluding GST. ₹2,40,000 is 240000."),
+            acceptance_criteria: z
+              .array(
+                z.object({
+                  id: z
+                    .string()
+                    .regex(/^[a-z]$/, { error: "A criterion id is its letter from get_milestone, such as b." })
+                    .optional()
+                    .describe("The criterion's letter from get_milestone. Leave it out for a new criterion."),
+                  text: text(500).describe("Short, objective and testable."),
+                }),
+              )
+              .min(1, { error: "Keep at least one acceptance criterion." })
+              .max(26)
+              .optional()
+              .describe(
+                "The complete list, in order. Keep each existing criterion's letter so objections and the pack still match. " +
+                  "A criterion you leave out is removed.",
+              ),
+            invoiced_on: isoDate("invoiced_on")
+              .optional()
+              .describe("The date the invoice went out, in India time (YYYY-MM-DD). The milestone must be accepted first."),
+            paid_on: isoDate("paid_on")
+              .optional()
+              .describe("The date the client paid, in India time (YYYY-MM-DD). It must be invoiced first, or in the same call."),
+          })
+          .refine((c) => Object.values(c).some((v) => v !== undefined), { error: "Send at least one change." }),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ milestone_id, changes }) =>
+      run("update_milestone", async () => {
+        const before = await getMilestone(ws, milestone_id);
+        if (!before) throw notFound(milestone_id);
+        const { title, acceptance_criteria, ...rest } = changes;
+        let criteria;
+        if (acceptance_criteria) {
+          const result = replaceCriteria(before.milestone.criteria, acceptance_criteria);
+          if ("error" in result) throw new UserError(result.error);
+          criteria = result.ok;
+        }
+        const updated = await updateMilestone(
+          ws,
+          milestone_id,
+          { ...rest, title: title === undefined ? undefined : withoutNumber(title), criteria },
+          "claude",
+        );
+        const after = await getMilestone(ws, milestone_id);
+        if (!after) throw notFound(milestone_id);
+        return {
+          updated,
+          ...(updated ? {} : { message: "Nothing changed: the milestone already had these values." }),
+          ...summary(after),
+          criteria: after.milestone.criteria.map((c) => `(${c.id}) ${c.text}`),
+          invoiced_on: after.milestone.invoiced_on,
+          paid_on: after.milestone.paid_on,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "get_pipeline_summary",
+    {
+      title: "Get pipeline summary",
+      description:
+        "Use when the user asks how things stand across clients: what is stuck, what was deemed accepted, and what is due or overdue. " +
+        "Returns counts and rupee totals by status, objection windows closing in the next 7 days, open objections with the client's notes, " +
+        "deemed acceptances from the last 14 days, and payments due in the next 30 days or overdue. " +
+        "Quote each item's deadline sentence rather than working out dates, and give its link when you mention it.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () =>
+      run("get_pipeline_summary", async () => {
+        const today = todayIST();
+        const p = pipeline(await listMilestones(ws), today);
+        const textOf = (r: MilestoneRow, id: string) => r.milestone.criteria.find((c) => c.id === id)?.text ?? "(removed)";
+        return {
+          today,
+          totals_by_status: p.totals,
+          objection_windows_closing_in_7_days: p.closingSoon.map((r) => ({
+            ...summary(r),
+            client_approver: { name: r.client.approver_name, email: r.client.approver_email },
+            client_review_url: r.milestone.review_token ? reviewUrl(r.milestone.review_token) : null,
+          })),
+          open_objections: p.objectionsOpen.map((r) => ({
+            ...summary(r),
+            objections: r.objections
+              .filter((o) => !o.resolved_at && !o.outside_window)
+              .map((o) => ({
+                criteria: o.criteria_ids.map((id) => `(${id}) ${textOf(r, id)}`),
+                note: o.note,
+                raised_by: o.raised_by,
+                raised_at: istTimestamp(o.raised_at),
+              })),
+          })),
+          deemed_accepted_last_14_days: p.recentlyDeemed.map(summary),
+          payments_due_in_30_days_or_overdue: p.paymentsDue.map(summary),
+          dashboard_url: dashboardUrl(),
         };
       }),
   );

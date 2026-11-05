@@ -11,7 +11,7 @@ import { mark, saveCriteria, saveDetails, savePack } from "./actions";
 
 const input = "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none";
 const primary = "rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700";
-const small = "rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 disabled:opacity-40";
+const small = "rounded border border-neutral-300 px-2 py-1.5 text-xs hover:bg-neutral-100 disabled:opacity-40 sm:py-0.5";
 const card = "rounded-lg border border-neutral-200 p-4";
 
 const ACTOR_STYLE = {

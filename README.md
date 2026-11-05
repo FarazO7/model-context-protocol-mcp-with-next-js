@@ -10,6 +10,8 @@ Prototype. Every company and person in the demo data is fictional. See `SPEC.md`
 - Email: `demo@brightfield.example`
 - Password: `Brightfield-9297b137`
 
+To connect Claude, log in and open Connect Claude. It has the workspace's connector URL and the steps.
+
 ## Run locally
 
 Needs Node 24 and a MongoDB Atlas database. Copy `.env.example` to `.env.local` and fill it in.

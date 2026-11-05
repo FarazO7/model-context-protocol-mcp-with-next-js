@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  billingProblem,
   clientCanRespond,
   daysBetween,
   isOutsideWindow,
   istDate,
   istTimestamp,
   milestoneClock,
+  pipeline,
+  type Clock,
   type ClockMilestone,
   type ClockObjection,
+  type Status,
 } from "./rules";
 
 const settings = { objection_window_days: 15, agreed_payment_days: 30, written_agreement: true };
@@ -174,4 +178,68 @@ it("lets the client respond only while awaiting acceptance or deemed accepted", 
   for (const status of ["draft", "objection_open", "accepted", "invoiced", "paid"] as const) {
     expect(clientCanRespond(status)).toBe(false);
   }
+});
+
+describe("billingProblem", () => {
+  const unbilled = { invoiced_on: null, paid_on: null };
+  const today = "2026-11-06";
+  it("allows an invoice from the acceptance date to today, and a payment with it", () => {
+    expect(billingProblem(unbilled, "2026-11-01", { invoiced_on: "2026-11-01" }, today)).toBeNull();
+    expect(billingProblem(unbilled, "2026-11-01", { invoiced_on: "2026-11-02", paid_on: "2026-11-06" }, today)).toBeNull();
+  });
+  it("needs acceptance before an invoice", () =>
+    expect(billingProblem(unbilled, null, { invoiced_on: today }, today)).toBe("Only an accepted milestone can be marked invoiced."));
+  it("refuses future dates and dates out of order", () => {
+    expect(billingProblem(unbilled, "2026-11-01", { invoiced_on: "2026-11-07" }, today)).toBe("The invoice date can't be in the future.");
+    expect(billingProblem(unbilled, "2026-11-01", { invoiced_on: "2026-10-31" }, today)).toBe(
+      "The invoice date can't be before the acceptance date, 2026-11-01.",
+    );
+    const invoiced = { invoiced_on: "2026-11-03", paid_on: null };
+    expect(billingProblem(invoiced, "2026-11-01", { paid_on: "2026-11-07" }, today)).toBe("The payment date can't be in the future.");
+    expect(billingProblem(invoiced, "2026-11-01", { paid_on: "2026-11-02" }, today)).toBe(
+      "The payment date can't be before the invoice date, 2026-11-03.",
+    );
+  });
+  it("needs an invoice before a payment", () =>
+    expect(billingProblem(unbilled, "2026-11-01", { paid_on: today }, today)).toBe("Mark the milestone invoiced before marking it paid."));
+  it("doesn't move a date once set", () => {
+    const paid = { invoiced_on: "2026-11-03", paid_on: "2026-11-05" };
+    expect(billingProblem(paid, "2026-11-01", { invoiced_on: today }, today)).toBe("This milestone was already invoiced on 2026-11-03.");
+    expect(billingProblem(paid, "2026-11-01", { paid_on: today }, today)).toBe("This milestone was already marked paid on 2026-11-05.");
+  });
+  it("has nothing to check when neither date changes", () => expect(billingProblem(unbilled, null, {}, today)).toBeNull());
+});
+
+describe("pipeline", () => {
+  const today = "2026-11-06";
+  const row = (name: string, status: Status, amount_inr: number, dates: Partial<Clock> = {}) => ({
+    name,
+    milestone: { amount_inr },
+    clock: { status, overdue: false, anchor_date: null, window_end: null, legal_acceptance_date: null, payment_due: null, ...dates },
+  });
+  const names = (rows: { name: string }[]) => rows.map((r) => r.name);
+  const rows = [
+    row("closes in 7", "awaiting_acceptance", 100, { window_end: "2026-11-13" }),
+    row("closes in 8", "awaiting_acceptance", 200, { window_end: "2026-11-14" }),
+    row("closes today", "awaiting_acceptance", 300, { window_end: "2026-11-06" }),
+    row("objection", "objection_open", 400, { window_end: "2026-11-20" }),
+    row("deemed 14 days ago", "deemed_accepted", 500, { window_end: "2026-10-23", payment_due: "2026-12-07" }),
+    row("deemed 15 days ago", "deemed_accepted", 600, { window_end: "2026-10-22", payment_due: "2026-12-06" }),
+    row("overdue", "invoiced", 700, { payment_due: "2026-11-01", overdue: true }),
+    row("paid", "paid", 800, { payment_due: "2026-10-01" }),
+  ];
+  const p = pipeline(rows, today);
+
+  it("totals every status, including empty ones", () => {
+    expect(p.totals.awaiting_acceptance).toEqual({ count: 3, total_inr: 600 });
+    expect(p.totals.deemed_accepted).toEqual({ count: 2, total_inr: 1100 });
+    expect(p.totals.draft).toEqual({ count: 0, total_inr: 0 });
+  });
+  it("lists windows closing in the next 7 days, soonest first", () =>
+    expect(names(p.closingSoon)).toEqual(["closes today", "closes in 7"]));
+  it("lists open objections", () => expect(names(p.objectionsOpen)).toEqual(["objection"]));
+  it("lists deemed acceptances whose window closed in the last 14 days", () =>
+    expect(names(p.recentlyDeemed)).toEqual(["deemed 14 days ago"]));
+  it("lists payments due within 30 days or past due, soonest first", () =>
+    expect(names(p.paymentsDue)).toEqual(["overdue", "deemed 15 days ago"]));
 });

@@ -106,3 +106,57 @@ export function milestoneClock(
     payment_due: due,
   };
 }
+
+/**
+ * Why an invoice or payment date can't be recorded, or null when it can. Invoicing needs acceptance, and payment
+ * needs an invoice, which may come in the same change. Dates run up to today and don't move once set.
+ */
+export function billingProblem(
+  m: Pick<Milestone, "invoiced_on" | "paid_on">,
+  acceptedOn: string | null,
+  change: { invoiced_on?: string; paid_on?: string },
+  today: string,
+): string | null {
+  if (change.invoiced_on !== undefined) {
+    if (m.invoiced_on) return `This milestone was already invoiced on ${m.invoiced_on}.`;
+    if (!acceptedOn) return "Only an accepted milestone can be marked invoiced.";
+    if (change.invoiced_on > today) return "The invoice date can't be in the future.";
+    if (change.invoiced_on < acceptedOn) return `The invoice date can't be before the acceptance date, ${acceptedOn}.`;
+  }
+  if (change.paid_on !== undefined) {
+    if (m.paid_on) return `This milestone was already marked paid on ${m.paid_on}.`;
+    const invoiced = change.invoiced_on ?? m.invoiced_on;
+    if (!invoiced) return "Mark the milestone invoiced before marking it paid.";
+    if (change.paid_on > today) return "The payment date can't be in the future.";
+    if (change.paid_on < invoiced) return `The payment date can't be before the invoice date, ${invoiced}.`;
+  }
+  return null;
+}
+
+/**
+ * What get_pipeline_summary reports (SPEC section 7): totals by status, objection windows closing in the next 7 days,
+ * open objections, deemed acceptances whose window closed in the last 14 days, and payments due within 30 days or past due.
+ */
+export function pipeline<T extends { milestone: Pick<Milestone, "amount_inr">; clock: Clock }>(rows: T[], today: string) {
+  const within = (date: string | null, from: number, to: number) =>
+    date !== null && daysBetween(today, date) >= from && daysBetween(today, date) <= to;
+  const by = (key: "window_end" | "payment_due") => (a: T, b: T) => String(a.clock[key]).localeCompare(String(b.clock[key]));
+  const totals = Object.fromEntries(
+    STATUSES.map((status) => {
+      const of = rows.filter((r) => r.clock.status === status);
+      return [status, { count: of.length, total_inr: of.reduce((sum, r) => sum + r.milestone.amount_inr, 0) }];
+    }),
+  ) as Record<Status, { count: number; total_inr: number }>;
+  const owed: Status[] = ["accepted", "deemed_accepted", "invoiced"];
+  return {
+    totals,
+    closingSoon: rows
+      .filter((r) => r.clock.status === "awaiting_acceptance" && within(r.clock.window_end, 0, 7))
+      .sort(by("window_end")),
+    objectionsOpen: rows.filter((r) => r.clock.status === "objection_open"),
+    recentlyDeemed: rows.filter((r) => r.clock.status === "deemed_accepted" && within(r.clock.window_end, -14, -1)),
+    paymentsDue: rows
+      .filter((r) => owed.includes(r.clock.status) && within(r.clock.payment_due, -Infinity, 30))
+      .sort(by("payment_due")),
+  };
+}

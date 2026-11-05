@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEvidence, reviseCriteria, withoutNumber } from "./edits";
+import { parseEvidence, replaceCriteria, reviseCriteria, withoutNumber } from "./edits";
 
 const abc = [
   { id: "a", text: "First" },
@@ -57,5 +57,31 @@ describe("parseEvidence", () => {
   it("refuses javascript: and plain text", () => {
     expect(parseEvidence("Bad | javascript:alert(1)")).toEqual({ error: "Line 1 of the evidence needs a link starting with https://." });
     expect(parseEvidence("x\nnot a link")).toEqual({ error: "Line 1 of the evidence needs a link starting with https://." });
+  });
+});
+
+describe("replaceCriteria", () => {
+  it("edits, reorders and removes by letter", () => {
+    expect(replaceCriteria(abc, [{ id: "c", text: "Third, tightened" }, { id: "a", text: "First" }])).toEqual({
+      ok: [{ id: "c", text: "Third, tightened" }, abc[0]],
+    });
+  });
+  it("gives new criteria the next letters, even after a removal in the same list", () => {
+    expect(replaceCriteria(abc, [abc[0], { text: "New" }, { text: "Newer" }])).toEqual({
+      ok: [abc[0], { id: "d", text: "New" }, { id: "e", text: "Newer" }],
+    });
+  });
+  it("refuses unknown and repeated letters", () => {
+    expect(replaceCriteria(abc, [{ id: "x", text: "?" }])).toEqual({
+      error: "There is no criterion (x) on this milestone. Leave id out to add a new criterion.",
+    });
+    expect(replaceCriteria(abc, [abc[0], { id: "a", text: "Again" }])).toEqual({
+      error: "Criterion (a) is in the list twice. List each letter once.",
+    });
+  });
+  it("stops after (z)", () => {
+    expect(replaceCriteria([{ id: "z", text: "Last" }], [{ text: "One more" }])).toEqual({
+      error: "A milestone can have at most 26 criteria.",
+    });
   });
 });
