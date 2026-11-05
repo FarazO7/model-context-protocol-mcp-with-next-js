@@ -40,7 +40,7 @@ Workspace settings: objection window 15 days; agreed payment days 30; written ag
   2. `invoiced` if `invoiced_on` is set, with an `overdue` flag if today is after the payment due date.
   3. `draft` if not yet delivered.
   4. `objection_open` if an objection raised inside the window is unresolved.
-  5. `accepted` if the client accepted after the anchor date.
+  5. `accepted` if the client accepted on or after the anchor date.
   6. `deemed_accepted` if today is after the window end.
   7. Otherwise `awaiting_acceptance`.
 - **Legal acceptance date** (for `accepted` and `deemed_accepted`) = anchor date.
