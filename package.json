@@ -1,35 +1,33 @@
 {
-  "name": "next.js-mcp-server",
+  "name": "proofflow",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "type-check": "tsc --noEmit",
-    "lint": "eslint .",
-    "test:client": "node scripts/test-client.mjs"
+    "lint": "eslint",
+    "test": "vitest run",
+    "db:push": "node --env-file=.env.local scripts/db-push.ts",
+    "db:seed": "node --env-file=.env.local scripts/seed.ts",
+    "check:no-ai": "bash scripts/check-no-ai.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.0.0",
-    "mcp-handler": "^2.0.0",
-    "next": "15.5.28",
-    "react": "19.2.9",
-    "react-dom": "19.2.9",
-    "zod": "^4.2.0"
+    "mongodb": "^7.8.0",
+    "next": "16.4.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@eslint/compat": "^2.0.0",
-    "@eslint/eslintrc": "^3.3.3",
-    "@modelcontextprotocol/client": "^2.0.0",
-    "@types/node": "^20",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
+    "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.28",
-    "typescript": "^5"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "packageManager": "pnpm@8.15.7+sha512.c85cd21b6da10332156b1ca2aa79c0a61ee7ad2eb0453b88ab299289e9e8ca93e6091232b25c07cbf61f6df77128d9c849e5c9ac6e44854dbd211c49f3a67adc"
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
 }

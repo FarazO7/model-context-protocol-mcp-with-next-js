@@ -1,33 +1,28 @@
-# Example Next.js MCP Server
+# ProofFlow
 
-This template uses [`mcp-handler` 2](https://www.npmjs.com/package/mcp-handler) and the MCP TypeScript SDK v2 to add a stateless MCP server to a Next.js App Router application.
+Takes a milestone from "we delivered it" to "the client accepted it, and payment falls due on this date". The customer's own Claude reads contracts and writes acceptance packs through ProofFlow's MCP tools. ProofFlow keeps the record. There is no AI inside this app.
 
-## Usage
+Prototype. Every company and person in the demo data is fictional. See `SPEC.md` for the full spec.
 
-Update `app/mcp/route.ts` with your tools, prompts, and resources following the [MCP TypeScript SDK v2 documentation](https://ts.sdk.modelcontextprotocol.io/v2/).
+## Test login
 
-Start the application and connect an MCP client to:
+- URL: https://model-context-protocol-mcp-with-nex-eight-blush.vercel.app
+- Email: `demo@brightfield.example`
+- Password: `Brightfield-9297b137`
+
+## Run locally
+
+Needs Node 24 and a MongoDB Atlas database. Copy `.env.example` to `.env.local` and fill it in.
 
 ```
-http://localhost:3000/mcp
+npm install
+npm run db:push    # create indexes
+npm run db:seed    # reset the fictional demo workspace (dates relative to today, IST)
+npm run dev
+npm test
+npm run check:no-ai
 ```
 
-## Protocol support
+## Deploy
 
-- The current 2026-07-28 MCP protocol is served natively.
-- Stateless clients using 2025-era Streamable HTTP are supported by the compatibility layer.
-- The deprecated HTTP+SSE transport is not supported. Redis is not required.
-
-## Notes for running on Vercel
-
-- Requires Node.js 20 or later
-- Make sure you have [Fluid compute](https://vercel.com/docs/functions/fluid-compute) enabled for efficient execution
-- [Deploy the Next.js MCP template](https://vercel.com/templates/next.js/model-context-protocol-mcp-with-next-js)
-
-## Sample Client
-
-`scripts/test-client.mjs` connects over Streamable HTTP, lists the available tools, and calls `echo`.
-
-```sh
-pnpm test:client -- https://mcp-for-next-js.vercel.app
-```
+Push to `main`. Vercel builds it. The Vercel project needs `MONGO_URI` and `SESSION_SECRET`.
