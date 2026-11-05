@@ -47,6 +47,8 @@ export interface Clock {
   status: Status;
   /** Invoiced, not paid, and today is after the payment due date. */
   overdue: boolean;
+  /** The date the window runs from: the latest resolution, otherwise the delivery. */
+  anchor_date: string | null;
   /** The last day the client can raise an objection. */
   window_end: string | null;
   /** Set once the milestone is accepted or deemed accepted. */
@@ -57,6 +59,12 @@ export interface Clock {
 /** An objection raised after the window end is saved and flagged, but doesn't change the status. */
 export const isOutsideWindow = (raisedOn: string, windowEnd: string) => raisedOn > windowEnd;
 
+/**
+ * Whether the client can still accept or object on the review page. Not while an objection is open
+ * (resolving it would clear the acceptance), and not once accepted, invoiced or paid.
+ */
+export const clientCanRespond = (status: Status) => status === "awaiting_acceptance" || status === "deemed_accepted";
+
 export function milestoneClock(
   m: ClockMilestone,
   objections: ClockObjection[],
@@ -65,7 +73,14 @@ export function milestoneClock(
 ): Clock {
   const settle = (status: Status): Status => (m.paid_on ? "paid" : m.invoiced_on ? "invoiced" : status);
   if (!m.delivered_on) {
-    return { status: settle("draft"), overdue: false, window_end: null, legal_acceptance_date: null, payment_due: null };
+    return {
+      status: settle("draft"),
+      overdue: false,
+      anchor_date: null,
+      window_end: null,
+      legal_acceptance_date: null,
+      payment_due: null,
+    };
   }
 
   // Resolving an objection restarts the window from the resolution date (a simplification; see Prototype notes).
@@ -85,6 +100,7 @@ export function milestoneClock(
   return {
     status,
     overdue: status === "invoiced" && due !== null && today > due,
+    anchor_date: anchor,
     window_end: windowEnd,
     legal_acceptance_date: legal,
     payment_due: due,

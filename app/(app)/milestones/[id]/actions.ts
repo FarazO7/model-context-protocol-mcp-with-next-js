@@ -1,25 +1,13 @@
 "use server";
 
-import { refresh } from "next/cache";
 import { z } from "zod";
 import type { FormState } from "@/components/action-form";
+import { attempt } from "@/lib/action";
 import { requireSession } from "@/lib/auth";
 import { parseEvidence, reviseCriteria } from "@/lib/edits";
-import { getMilestone, markMilestone, updateMilestone, UserError } from "@/lib/milestones";
+import { getMilestone, markMilestone, updateMilestone } from "@/lib/milestones";
 
 // Every action re-checks the session; the milestone id comes from the browser and is scoped to the workspace in lib.
-
-async function attempt(work: () => Promise<unknown>): Promise<FormState> {
-  try {
-    const changed = await work();
-    refresh();
-    return { ok: changed === false ? "Nothing to save." : "Saved." };
-  } catch (e) {
-    if (e instanceof UserError) return { error: e.message };
-    console.error("Milestone action failed", e);
-    return { error: "Something went wrong. Reload the page to see what was saved." };
-  }
-}
 
 const details = z.object({
   title: z.string().trim().min(1, { error: "Give the milestone a title." }).max(200, { error: "Keep the title under 200 characters." }),

@@ -5,6 +5,7 @@ import type { Clock } from "./rules";
 const clock = (c: Partial<Clock>): Clock => ({
   status: "awaiting_acceptance",
   overdue: false,
+  anchor_date: null,
   window_end: null,
   legal_acceptance_date: null,
   payment_due: null,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  clientCanRespond,
   daysBetween,
   isOutsideWindow,
   istDate,
@@ -47,6 +48,7 @@ describe("milestoneClock: the seven tests from SPEC section 5", () => {
     expect(milestoneClock(delivered("2026-11-01"), [], settings, "2026-11-17")).toEqual({
       status: "deemed_accepted",
       overdue: false,
+      anchor_date: "2026-11-01",
       window_end: "2026-11-16",
       legal_acceptance_date: "2026-11-01",
       payment_due: "2026-12-01",
@@ -105,6 +107,7 @@ describe("milestoneClock: edge cases", () => {
     expect(milestoneClock(delivered("2026-11-01"), [], settings, "2026-11-16")).toEqual({
       status: "awaiting_acceptance",
       overdue: false,
+      anchor_date: "2026-11-01",
       window_end: "2026-11-16",
       legal_acceptance_date: null,
       payment_due: null,
@@ -128,6 +131,7 @@ describe("milestoneClock: edge cases", () => {
     const m = delivered("2026-11-01", { client_accepted_at: ist("2026-11-05") });
     expect(milestoneClock(m, [resolvedOn("2026-11-14")], settings, "2026-11-20")).toMatchObject({
       status: "awaiting_acceptance",
+      anchor_date: "2026-11-14",
       window_end: "2026-11-29",
       legal_acceptance_date: null,
     });
@@ -156,9 +160,18 @@ describe("milestoneClock: edge cases", () => {
     expect(milestoneClock(delivered(null), [], settings, "2026-11-20")).toEqual({
       status: "draft",
       overdue: false,
+      anchor_date: null,
       window_end: null,
       legal_acceptance_date: null,
       payment_due: null,
     });
   });
+});
+
+it("lets the client respond only while awaiting acceptance or deemed accepted", () => {
+  expect(clientCanRespond("awaiting_acceptance")).toBe(true);
+  expect(clientCanRespond("deemed_accepted")).toBe(true);
+  for (const status of ["draft", "objection_open", "accepted", "invoiced", "paid"] as const) {
+    expect(clientCanRespond(status)).toBe(false);
+  }
 });

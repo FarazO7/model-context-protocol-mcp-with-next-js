@@ -1,17 +1,20 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Workspace } from "@/lib/db/schema";
+import { day } from "@/lib/format";
 import {
   createEngagement,
   dashboardUrl,
   getMilestone,
   listMilestones,
   milestoneUrl,
+  resolveObjection,
   reviewUrl,
+  submitForAcceptance,
   UserError,
   type MilestoneRow,
 } from "@/lib/milestones";
-import { istTimestamp, STATUSES, todayIST } from "@/lib/rules";
+import { istTimestamp, STATUSES, todayIST, type Clock } from "@/lib/rules";
 
 export const instructions = (ws: Workspace) =>
   [
@@ -40,6 +43,30 @@ async function run(tool: string, work: () => Promise<unknown>) {
 }
 
 const text = (max: number) => z.string().trim().min(1).max(max);
+
+const milestoneId = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{24}$/i, { error: "milestone_id is the 24-character id that list_milestones returns." })
+  .describe("The id from list_milestones.");
+
+const evidenceInput = z
+  .array(
+    z.object({
+      label: text(200).describe("What the link shows, for example TestFlight build 1.4.0."),
+      url: z.url({ protocol: /^https?$/, error: "Evidence links must start with https:// or http://." }).max(2000),
+    }),
+  )
+  .max(30, { error: "Send at most 30 evidence links." });
+
+const markdown = (what: string) =>
+  z.string().trim().min(1, { error: `Write the ${what} first.` }).max(20_000, { error: `Keep the ${what} under 20,000 characters.` });
+
+/** The sentence the client sees as a banner, for Claude to pass on. */
+const acceptedFrom = (c: Clock) =>
+  c.window_end && c.anchor_date
+    ? `If no written objection is raised by ${day(c.window_end)}, the milestone counts as accepted from ${day(c.anchor_date)}.`
+    : "";
 
 const summary = (r: MilestoneRow) => ({
   id: r.milestone._id.toHexString(),
@@ -159,13 +186,7 @@ export function registerTools(server: McpServer, ws: Workspace) {
         "Use before writing an acceptance pack, replying to an objection or answering detailed questions about one milestone. " +
         "Returns its criteria with their letters, the acceptance pack, evidence, objections, the last 20 events, " +
         "the computed dates and the client review link. Get the id from list_milestones.",
-      inputSchema: z.object({
-        milestone_id: z
-          .string()
-          .trim()
-          .regex(/^[a-f0-9]{24}$/i, { error: "milestone_id is the 24-character id that list_milestones returns." })
-          .describe("The id from list_milestones."),
-      }),
+      inputSchema: z.object({ milestone_id: milestoneId }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ milestone_id }) =>
@@ -201,6 +222,81 @@ export function registerTools(server: McpServer, ws: Workspace) {
             resolution_markdown: o.resolution_md,
           })),
           recent_events: events.map((e) => ({ at: istTimestamp(e.at), actor: e.actor, type: e.type, data: e.data })),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "submit_for_acceptance",
+    {
+      title: "Submit for acceptance",
+      description:
+        "Before calling, write the acceptance pack: one section per acceptance criterion saying how it is met, with evidence links. " +
+        "If a criterion is not fully met, or depends on the client, say so plainly. Never claim a criterion is met without evidence. " +
+        "Give the user the review link to send to the client.",
+      inputSchema: z.object({
+        milestone_id: milestoneId,
+        delivered_on: z.iso
+          .date({ error: "delivered_on must be a date like 2026-11-06." })
+          .describe("The date the work was handed over, in India time (YYYY-MM-DD)."),
+        acceptance_pack_markdown: markdown("acceptance pack").describe(
+          "Markdown with one section per criterion, headed by its letter, for example ### (b) In-stock badge.",
+        ),
+        evidence: evidenceInput.describe("Links that back up the pack: builds, test reports, checklists."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ milestone_id, delivered_on, acceptance_pack_markdown, evidence }) =>
+      run("submit_for_acceptance", async () => {
+        const { milestone: m, clock } = await submitForAcceptance(
+          ws,
+          milestone_id,
+          { delivered_on, pack_md: acceptance_pack_markdown, evidence },
+          "claude",
+        );
+        return {
+          milestone: `M${m.seq}: ${m.title}`,
+          status: clock.status,
+          delivered_on,
+          objection_deadline: clock.window_end,
+          client_review_url: reviewUrl(m.review_token),
+          url: milestoneUrl(m._id),
+          message: `Send the client this review link. ${acceptedFrom(clock)}`,
+        };
+      }),
+  );
+
+  server.registerTool(
+    "resolve_objection",
+    {
+      title: "Resolve objection",
+      description:
+        "First read the objection, the criteria and the contract. Address each criterion raised. " +
+        "If the cause sits with the client, such as a client-side dependency, say so politely and cite the contract.",
+      inputSchema: z.object({
+        milestone_id: milestoneId,
+        resolution_markdown: markdown("resolution").describe(
+          "Markdown addressed to the client, with one section per criterion they raised.",
+        ),
+        evidence: evidenceInput.optional().describe("New links that back up the resolution, for example a fixed build."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ milestone_id, resolution_markdown, evidence }) =>
+      run("resolve_objection", async () => {
+        const { milestone: m, clock } = await resolveObjection(
+          ws,
+          milestone_id,
+          { resolution_md: resolution_markdown, evidence: evidence ?? [] },
+          "claude",
+        );
+        return {
+          milestone: `M${m.seq}: ${m.title}`,
+          status: clock.status,
+          objection_deadline: clock.window_end,
+          client_review_url: m.review_token ? reviewUrl(m.review_token) : null,
+          url: milestoneUrl(m._id),
+          message: `The objection is resolved and the window restarts today. Send the client the same review link. ${acceptedFrom(clock)}`,
         };
       }),
   );

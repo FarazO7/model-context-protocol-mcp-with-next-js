@@ -74,7 +74,7 @@ export function describeEvent(e: Pick<AppEvent, "type" | "data">): string {
     case "objection_raised":
       return `Objection raised by ${text("by")} on ${letters((d.criteria_ids as string[]) ?? [])}${d.outside_window ? ", outside the window" : ""}`;
     case "objection_resolved":
-      return "Objection resolved";
+      return `Resolved the objection on ${letters((d.criteria_ids as string[]) ?? [])}`;
     case "marked_invoiced":
       return `Marked invoiced on ${day(text("invoiced_on"))}`;
     case "marked_paid":
