@@ -108,7 +108,8 @@ export async function createEngagement(ws: Workspace, input: NewEngagement, acto
   if (existing) {
     throw new UserError(
       `An engagement with contract reference ${input.contract_ref} already exists ("${existing.title}"). ` +
-        "Don't create it again. Call list_milestones to see its milestones.",
+        "Don't create it again. Call list_milestones to see its milestones." +
+        (ws.demo ? ` This is the shared demo workspace, so the user can start over with Reset demo data at ${appUrl("/about")}` : ""),
     );
   }
 

@@ -13,6 +13,8 @@ export interface Workspace {
   agreed_payment_days: number;
   written_agreement: boolean;
   mcp_key: string;
+  /** Set by the seed. Only a demo workspace can be reset from the app. */
+  demo?: boolean;
 }
 
 export interface User {

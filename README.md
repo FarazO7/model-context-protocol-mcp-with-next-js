@@ -12,6 +12,8 @@ Prototype. Every company and person in the demo data is fictional. See `SPEC.md`
 
 To connect Claude, log in and open Connect Claude. It has the workspace's connector URL and the steps.
 
+Testers share one demo workspace. To start over, use Reset demo data on the Prototype notes page.
+
 ## Run locally
 
 Needs Node 24 and a MongoDB Atlas database. Copy `.env.example` to `.env.local` and fill it in.

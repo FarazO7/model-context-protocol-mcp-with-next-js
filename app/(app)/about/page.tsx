@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { ActionForm } from "@/components/action-form";
 import { requireSession } from "@/lib/auth";
+import { resetDemo } from "./actions";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -64,6 +67,31 @@ export default async function PrototypeNotesPage() {
         </li>
         <li>An objection raised after the window closes is recorded and flagged, but doesn&apos;t change the acceptance.</li>
       </Section>
+
+      {ws.demo && (
+        <section className="rounded-lg border border-red-200 p-4">
+          <h2 className="font-semibold">Reset demo data</h2>
+          <p className="mt-1 text-sm text-neutral-700">
+            Deletes every client, engagement, milestone, objection and event in this workspace, including anything you or
+            Claude created. Then restores the fictional Lotus Health and Monsoon Logistics data, dated from today. Your login
+            and connector URL stay the same. Review links sent before the reset stop working.
+          </p>
+          <ActionForm action={resetDemo} className="mt-3 space-y-3">
+            <label className="flex items-start gap-3 text-sm">
+              <input type="checkbox" name="confirm" value="yes" required className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>I understand this deletes everything in this workspace.</span>
+            </label>
+            <div className="flex flex-wrap items-center gap-4">
+              <button className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white hover:bg-red-800">
+                Reset demo data
+              </button>
+              <Link href="/dashboard" className="text-sm underline">
+                Go to the dashboard
+              </Link>
+            </div>
+          </ActionForm>
+        </section>
+      )}
     </div>
   );
 }
