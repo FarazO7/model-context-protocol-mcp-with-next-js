@@ -41,7 +41,9 @@ app/api/w/[key]/mcp/route.ts          MCP endpoint; workspace chosen by key
 lib/db/schema.ts, lib/db/index.ts
 lib/rules.ts, lib/rules.test.ts
 lib/milestones.ts                     workspace-scoped reads and writes shared by MCP tools and pages
+lib/format.ts, lib/edits.ts           display formatting and chips; pure checks for edited input
 lib/auth.ts, lib/crypto.ts, lib/events.ts, lib/mcp/tools.ts
+components/                           ActionForm, CopyButton, Markdown
 scripts/seed.ts, scripts/check-no-ai.sh
 demo/                                 sample inputs for testing and the video; not used by the app
 ```

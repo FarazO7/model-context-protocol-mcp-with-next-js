@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { db } from "@/lib/db";
 import type { Actor, Client, Engagement, Milestone, Workspace } from "@/lib/db/schema";
+import { withoutNumber } from "@/lib/edits";
 import { logEvents } from "@/lib/events";
 import { milestoneClock, todayIST, type Clock } from "@/lib/rules";
 
@@ -119,7 +120,7 @@ export async function createEngagement(ws: Workspace, input: NewEngagement, acto
     workspace_id: ws._id,
     engagement_id: engagement._id,
     seq: i + 1,
-    title: m.title,
+    title: withoutNumber(m.title),
     description: m.description,
     amount_inr: m.amount_inr,
     criteria: m.acceptance_criteria.map((text, j) => ({ id: String.fromCharCode(97 + j), text })),
@@ -148,4 +149,48 @@ export async function createEngagement(ws: Workspace, input: NewEngagement, acto
     now,
   );
   return { engagement, client, milestones };
+}
+
+type Editable = Pick<Milestone, "title" | "description" | "amount_inr" | "criteria" | "pack_md" | "evidence">;
+
+/** Saves the fields that changed and logs one event naming them. Returns false when nothing changed. */
+export async function updateMilestone(ws: Workspace, id: string, patch: Partial<Editable>, actor: Actor) {
+  const found = await getMilestone(ws, id);
+  if (!found) throw new UserError("That milestone isn't in this workspace.");
+  const m = found.milestone;
+  const changed = (Object.keys(patch) as (keyof Editable)[]).filter(
+    (k) => JSON.stringify(m[k]) !== JSON.stringify(patch[k]),
+  );
+  if (!changed.length) return false;
+
+  if (patch.criteria) {
+    const kept = new Set(patch.criteria.map((c) => c.id));
+    const named = found.objections.flatMap((o) => o.criteria_ids).find((cid) => !kept.has(cid));
+    if (named) throw new UserError(`Criterion (${named}) is named in an objection, so it can't be removed.`);
+  }
+
+  const set = Object.fromEntries(changed.map((k) => [k, patch[k]])) as Partial<Editable>;
+  await db().milestones.updateOne({ _id: m._id, workspace_id: ws._id }, { $set: { ...set, updated_at: new Date() } });
+  const changes = Object.fromEntries(
+    changed.map((k) => [k, k === "amount_inr" || k === "title" ? { from: m[k], to: patch[k] } : true]),
+  );
+  await logEvents([{ workspace_id: ws._id, milestone_id: m._id, actor, type: "milestone_updated", data: { changes } }]);
+  return true;
+}
+
+/** Records today (IST) as the invoiced or paid date. Invoicing needs acceptance; payment needs an invoice. */
+export async function markMilestone(ws: Workspace, id: string, what: "invoiced" | "paid", actor: Actor) {
+  const found = await getMilestone(ws, id);
+  if (!found) throw new UserError("That milestone isn't in this workspace.");
+  const { status } = found.clock;
+  if (what === "invoiced" && status !== "accepted" && status !== "deemed_accepted") {
+    throw new UserError("Only an accepted milestone can be marked invoiced.");
+  }
+  if (what === "paid" && status !== "invoiced") throw new UserError("Mark the milestone invoiced before marking it paid.");
+
+  const field = what === "invoiced" ? "invoiced_on" : "paid_on";
+  const today = todayIST();
+  const _id = found.milestone._id;
+  await db().milestones.updateOne({ _id, workspace_id: ws._id }, { $set: { [field]: today, updated_at: new Date() } });
+  await logEvents([{ workspace_id: ws._id, milestone_id: _id, actor, type: `marked_${what}`, data: { [field]: today } }]);
 }

@@ -77,7 +77,9 @@ export function registerTools(server: McpServer, ws: Workspace) {
         milestones: z
           .array(
             z.object({
-              title: text(200).describe("Milestone name from the contract."),
+              title: text(200).describe(
+                "Milestone name without its number, for example Store finder (iOS and Android). ProofFlow numbers milestones itself.",
+              ),
               description: z.string().trim().max(2000).describe("The deliverables for this stage, in a sentence or two."),
               amount_inr: z
                 .number({ error: "amount_inr must be a number of rupees." })

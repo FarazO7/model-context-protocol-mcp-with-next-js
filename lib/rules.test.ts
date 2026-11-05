@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  daysBetween,
   isOutsideWindow,
   istDate,
   istTimestamp,
@@ -33,6 +34,12 @@ describe("addDays", () => {
   it("crosses a month end", () => expect(addDays("2026-11-25", 10)).toBe("2026-12-05"));
   it("crosses a year end", () => expect(addDays("2026-12-31", 1)).toBe("2027-01-01"));
   it("goes backwards", () => expect(addDays("2026-03-01", -1)).toBe("2026-02-28"));
+});
+
+describe("daysBetween", () => {
+  it("counts forwards across a month end", () => expect(daysBetween("2026-11-25", "2026-12-05")).toBe(10));
+  it("is negative backwards", () => expect(daysBetween("2026-11-06", "2026-11-01")).toBe(-5));
+  it("is zero on the same day", () => expect(daysBetween("2026-11-06", "2026-11-06")).toBe(0));
 });
 
 describe("milestoneClock: the seven tests from SPEC section 5", () => {
