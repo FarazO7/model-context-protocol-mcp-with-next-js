@@ -74,6 +74,25 @@ export async function listMilestones(ws: Workspace): Promise<MilestoneRow[]> {
     );
 }
 
+/** The workspace's latest events, newest first, each with its milestone's number and title. Read-only. */
+export async function listEvents(ws: Workspace, { actor, limit = 50 }: { actor?: Actor; limit?: number } = {}) {
+  const c = db();
+  const events = await c.events
+    .find({ workspace_id: ws._id, ...(actor ? { actor } : {}) })
+    .sort({ at: -1 })
+    .limit(limit)
+    .toArray();
+  const ids = events.flatMap((e) => (e.milestone_id ? [e.milestone_id] : []));
+  const milestones = ids.length
+    ? await c.milestones
+        .find({ _id: { $in: ids }, workspace_id: ws._id })
+        .project<Pick<Milestone, "_id" | "seq" | "title">>({ seq: 1, title: 1 })
+        .toArray()
+    : [];
+  const byId = new Map(milestones.map((m) => [hex(m._id), m]));
+  return events.map((event) => ({ event, milestone: event.milestone_id ? (byId.get(hex(event.milestone_id)) ?? null) : null }));
+}
+
 export async function getMilestone(ws: Workspace, id: string) {
   if (!/^[a-f0-9]{24}$/i.test(id)) return null;
   const c = db();

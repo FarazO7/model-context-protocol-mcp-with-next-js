@@ -5,9 +5,9 @@ import { resetDemo } from "./actions";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
+    <section className="glass p-5 sm:p-6">
       <h2 className="font-semibold">{title}</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-800">{children}</ul>
+      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm marker:text-brand">{children}</ul>
     </section>
   );
 }
@@ -18,10 +18,10 @@ export default async function PrototypeNotesPage() {
   const paymentDays = ws.written_agreement ? Math.min(ws.agreed_payment_days, 45) : 15;
 
   return (
-    <div className="max-w-3xl space-y-8">
+    <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold">Prototype notes</h1>
-        <p className="mt-1 text-sm text-neutral-700">
+        <h1 className="text-2xl font-semibold tracking-tight">Prototype notes</h1>
+        <p className="mt-1 text-sm text-muted">
           ProofFlow is a prototype. Every company and person in the demo data is fictional. The dates follow a simplified
           reading of the MSMED Act and are not legal advice.
         </p>
@@ -69,23 +69,21 @@ export default async function PrototypeNotesPage() {
       </Section>
 
       {ws.demo && (
-        <section className="rounded-lg border border-red-200 p-4">
-          <h2 className="font-semibold">Reset demo data</h2>
-          <p className="mt-1 text-sm text-neutral-700">
+        <section className="glass-solid p-5 ring-1 ring-red-200 sm:p-6">
+          <h2 className="font-semibold text-red-800">Reset demo data</h2>
+          <p className="mt-1 text-sm text-muted">
             Deletes every client, engagement, milestone, objection and event in this workspace, including anything you or
             Claude created. Then restores the fictional Lotus Health and Monsoon Logistics data, dated from today. Your login
             and connector URL stay the same. Review links sent before the reset stop working.
           </p>
           <ActionForm action={resetDemo} className="mt-3 space-y-3">
             <label className="flex items-start gap-3 text-sm">
-              <input type="checkbox" name="confirm" value="yes" required className="mt-0.5 h-5 w-5 shrink-0" />
+              <input type="checkbox" name="confirm" value="yes" required className="mt-0.5 h-5 w-5 shrink-0 accent-red-700" />
               <span>I understand this deletes everything in this workspace.</span>
             </label>
             <div className="flex flex-wrap items-center gap-4">
-              <button className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white hover:bg-red-800">
-                Reset demo data
-              </button>
-              <Link href="/dashboard" className="text-sm underline">
+              <button className="btn btn-danger">Reset demo data</button>
+              <Link href="/dashboard" className="text-sm font-medium text-brand-strong hover:underline">
                 Go to the dashboard
               </Link>
             </div>

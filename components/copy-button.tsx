@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CheckIcon, CopyIcon } from "./icons";
 
 /** Copies text; if the browser blocks the clipboard, shows the text selected so it can be copied by hand. */
 export function CopyButton({ text, label, className }: { text: string; label: string; className?: string }) {
@@ -13,7 +14,7 @@ export function CopyButton({ text, label, className }: { text: string; label: st
         value={text}
         aria-label="Link to copy"
         onFocus={(e) => e.currentTarget.select()}
-        className="w-full rounded-md border border-neutral-300 px-2 py-1 font-mono text-xs"
+        className="field mt-0 font-mono text-xs"
       />
     );
   }
@@ -31,6 +32,7 @@ export function CopyButton({ text, label, className }: { text: string; label: st
         }
       }}
     >
+      {state === "copied" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
       <span aria-live="polite">{state === "copied" ? "Copied" : label}</span>
     </button>
   );

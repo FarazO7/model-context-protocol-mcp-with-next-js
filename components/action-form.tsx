@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useRef } from "react";
+import { startTransition, useActionState, useEffect, useId, useRef } from "react";
 
 export type FormState = { ok?: string; error?: string; field?: string } | null;
 
@@ -34,12 +34,14 @@ export function ActionForm({
     }
   }, null);
 
-  // Point focus and screen readers at the field the server rejected.
+  // Point focus and screen readers at the field the server rejected. Clear the form only after a success:
+  // after an error, the client's note and ticks stay so they can fix one thing and send again.
   const formRef = useRef<HTMLFormElement>(null);
   const errorId = useId();
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
+    if (state?.ok) form.reset();
     for (const el of form.querySelectorAll(`[aria-describedby="${errorId}"]`)) {
       el.removeAttribute("aria-invalid");
       el.removeAttribute("aria-describedby");
@@ -55,18 +57,22 @@ export function ActionForm({
   return (
     <form
       ref={formRef}
+      // Before hydration the browser posts the form itself. After it, submits go through here instead of React's
+      // form handling, which would reset the form even when the action returns an error.
       action={formAction}
-      // A second submit while one is in flight is dropped: React skips the action when the event is prevented.
       onSubmit={(e) => {
-        if (busy.current) e.preventDefault();
-        else busy.current = true;
+        e.preventDefault();
+        if (busy.current) return; // a second submit while one is in flight is dropped
+        busy.current = true;
+        const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+        startTransition(() => formAction(data));
       }}
       className={className}
       aria-busy={pending}
     >
       {children}
       {pending && (
-        <p role="status" className="col-span-full text-sm text-neutral-600">
+        <p role="status" className="col-span-full text-sm text-muted">
           Sending…
         </p>
       )}

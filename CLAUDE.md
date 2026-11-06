@@ -34,7 +34,7 @@ The customer's own Claude reads contracts and delivery notes and writes acceptan
 ## Layout
 
 ```
-app/(app)/dashboard, milestones/[id], connect, about
+app/(app)/dashboard, milestones/[id], engagements, activity, connect, about, settings
 app/login
 app/r/[token]                         public client review page
 app/api/w/[key]/mcp/route.ts          MCP endpoint; workspace chosen by key
@@ -44,7 +44,8 @@ lib/milestones.ts                     workspace-scoped reads and writes shared b
 lib/format.ts, lib/edits.ts           display formatting and chips; pure checks for edited input
 lib/demo.ts                           the fictional demo data, used by db:seed and the Reset demo data button
 lib/auth.ts, lib/crypto.ts, lib/events.ts, lib/mcp/tools.ts, lib/action.ts (server action results)
-components/                           ActionForm, CopyButton, Markdown
+components/                           ActionForm, CopyButton, Markdown, AppNav, StatusBadge, ActorBadge, icons, Skeleton
+app/globals.css                       design tokens and the glass, btn and field utilities
 scripts/seed.ts, scripts/check-no-ai.sh
 demo/                                 sample inputs for testing and the video; not used by the app
 ```
