@@ -2,24 +2,26 @@
 
 import type { FormState } from "@/components/action-form";
 import { attempt } from "@/lib/action";
+import { signature } from "@/lib/edits";
 import { clientAccept, clientObject } from "@/lib/milestones";
 
 // Public actions: no session. The token from the page is re-checked against the database in lib.
-
-const nameOf = (form: FormData) => String(form.get("name") ?? "").trim();
+// The typed name is a signature: any name is accepted as typed, and a mismatch is only flagged to the supplier.
+// Each error names its field, so the form can point the client at it.
 
 export async function acceptMilestone(token: string, _prev: FormState, form: FormData): Promise<FormState> {
-  const name = nameOf(form);
-  if (!name || name.length > 100) return { error: "Type your full name to accept." };
-  return attempt(() => clientAccept(token, name), "Thank you. Your acceptance is recorded.");
+  const name = signature(form.get("name"));
+  if ("error" in name) return { error: name.error, field: "name" };
+  return attempt(() => clientAccept(token, name.ok), "Thank you. Your acceptance is recorded.");
 }
 
 export async function raiseObjection(token: string, _prev: FormState, form: FormData): Promise<FormState> {
   const criteria_ids = form.getAll("criteria").map(String);
   const note = String(form.get("note") ?? "").trim();
-  const name = nameOf(form);
-  if (!criteria_ids.length) return { error: "Tick at least one criterion that isn't met." };
-  if (!note || note.length > 2000) return { error: "Say what isn't met, in under 2,000 characters." };
-  if (!name || name.length > 100) return { error: "Type your full name to raise the objection." };
-  return attempt(() => clientObject(token, { name, note, criteria_ids }), "Your objection is recorded.");
+  const name = signature(form.get("name"));
+  if (!criteria_ids.length) return { error: "Tick at least one criterion that isn't met.", field: "criteria" };
+  if (!note) return { error: "Say what isn't met.", field: "note" };
+  if (note.length > 2000) return { error: "Keep the note under 2,000 characters.", field: "note" };
+  if ("error" in name) return { error: name.error, field: "name" };
+  return attempt(() => clientObject(token, { name: name.ok, note, criteria_ids }), "Your objection is recorded.");
 }

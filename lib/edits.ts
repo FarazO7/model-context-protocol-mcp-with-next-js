@@ -74,6 +74,14 @@ export function replaceCriteria(current: Criterion[], items: { id?: string; text
   return { ok: list };
 }
 
+/** The name a client types on the review page. It's a signature, so any name is kept as typed, once trimmed. */
+export function signature(raw: unknown): Result<string> {
+  const name = String(raw ?? "").trim();
+  if (!name) return { error: "Type your full name." };
+  if (name.length > 100) return { error: "Your name is too long. Use up to 100 characters." };
+  return { ok: name };
+}
+
 /** Reads evidence typed one per line as "Label | https://link". Only http and https links are allowed. */
 export function parseEvidence(text: string): Result<Evidence[]> {
   const out: Evidence[] = [];

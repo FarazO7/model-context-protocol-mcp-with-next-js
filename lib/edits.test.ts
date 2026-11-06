@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEvidence, replaceCriteria, reviseCriteria, withoutNumber } from "./edits";
+import { parseEvidence, replaceCriteria, reviseCriteria, signature, withoutNumber } from "./edits";
 
 const abc = [
   { id: "a", text: "First" },
@@ -83,5 +83,22 @@ describe("replaceCriteria", () => {
     expect(replaceCriteria([{ id: "z", text: "Last" }], [{ text: "One more" }])).toEqual({
       error: "A milestone can have at most 26 criteria.",
     });
+  });
+});
+
+describe("signature", () => {
+  it("keeps any name as typed, trimmed", () => {
+    expect(signature("Mira")).toEqual({ ok: "Mira" });
+    expect(signature("  meera iyer ")).toEqual({ ok: "meera iyer" });
+    expect(signature("मीरा अय्यर")).toEqual({ ok: "मीरा अय्यर" });
+  });
+  it("refuses an empty name", () => {
+    expect(signature("")).toEqual({ error: "Type your full name." });
+    expect(signature("   ")).toEqual({ error: "Type your full name." });
+    expect(signature(null)).toEqual({ error: "Type your full name." });
+  });
+  it("allows 100 characters and refuses 101", () => {
+    expect(signature("M".repeat(100))).toEqual({ ok: "M".repeat(100) });
+    expect(signature("M".repeat(101))).toEqual({ error: "Your name is too long. Use up to 100 characters." });
   });
 });

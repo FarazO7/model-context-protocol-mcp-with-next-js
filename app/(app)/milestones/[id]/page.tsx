@@ -6,7 +6,7 @@ import { Markdown } from "@/components/markdown";
 import { requireSession } from "@/lib/auth";
 import { ACTOR_LABEL, STATUS_LABEL, chip, dateTime, day, describeEvent, inr, letters } from "@/lib/format";
 import { getMilestone, reviewUrl } from "@/lib/milestones";
-import { todayIST } from "@/lib/rules";
+import { signedNameMatches, todayIST } from "@/lib/rules";
 import { mark, saveCriteria, saveDetails, savePack } from "./actions";
 
 const input = "mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none";
@@ -173,6 +173,14 @@ export default async function MilestonePage({ params }: PageProps<"/milestones/[
               <dd>{clock.legal_acceptance_date ? day(clock.legal_acceptance_date) : "Not yet"}</dd>
               <dt className="text-neutral-600">Payment due</dt>
               <dd>{clock.payment_due ? day(clock.payment_due) : "Not yet"}</dd>
+              {m.client_accepted_at && m.client_accepted_by && (
+                <>
+                  <dt className="text-neutral-600">Accepted by</dt>
+                  <dd>
+                    {m.client_accepted_by}, {dateTime(m.client_accepted_at)}
+                  </dd>
+                </>
+              )}
               {m.invoiced_on && (
                 <>
                   <dt className="text-neutral-600">Invoiced</dt>
@@ -186,6 +194,9 @@ export default async function MilestonePage({ params }: PageProps<"/milestones/[
                 </>
               )}
             </dl>
+            {m.client_accepted_at && m.client_accepted_by && (
+              <SignedAs name={m.client_accepted_by} approver={client.approver_name} />
+            )}
             <div className="mt-4 flex flex-wrap items-start gap-2">
               {m.review_token ? (
                 <CopyButton text={reviewUrl(m.review_token)} label="Copy client link" className={primary} />
@@ -217,6 +228,7 @@ export default async function MilestonePage({ params }: PageProps<"/milestones/[
                     <p className="font-medium">
                       {o.raised_by} on {letters(o.criteria_ids)}, {dateTime(o.raised_at)}
                     </p>
+                    <SignedAs name={o.raised_by} approver={client.approver_name} />
                     <ul className="list-disc pl-5 text-neutral-700">
                       {o.criteria_ids.map((cid) => (
                         <li key={cid}>
@@ -257,5 +269,15 @@ export default async function MilestonePage({ params }: PageProps<"/milestones/[
         </aside>
       </div>
     </>
+  );
+}
+
+/** A typed name is a signature. When it differs from the approver on record, say so in words, not only colour. */
+function SignedAs({ name, approver }: { name: string; approver: string }) {
+  if (signedNameMatches(name, approver)) return null;
+  return (
+    <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-sm text-amber-900">
+      Name check: signed as {name}. The approver on record is {approver}.
+    </p>
   );
 }

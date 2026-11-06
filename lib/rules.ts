@@ -160,3 +160,27 @@ export function pipeline<T extends { milestone: Pick<Milestone, "amount_inr">; c
       .sort(by("payment_due")),
   };
 }
+
+const comparableName = (name: string) => name.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Whether a name typed on the review page matches the approver on record, ignoring case, spacing and Unicode form.
+ * The typed name is a signature: a mismatch never blocks it, it only flags it for the supplier.
+ */
+export const signedNameMatches = (typed: string, approver: string) => comparableName(typed) === comparableName(approver);
+
+/** A double tap or a retry: the same name, note and criteria on the same milestone within two minutes. */
+export function isRepeatObjection(
+  earlier: Pick<Objection, "raised_by" | "note" | "criteria_ids" | "raised_at">[],
+  next: Pick<Objection, "raised_by" | "note" | "criteria_ids">,
+  now: Date,
+): boolean {
+  const key = (ids: string[]) => [...ids].sort().join(",");
+  return earlier.some(
+    (o) =>
+      now.getTime() - o.raised_at.getTime() < 120_000 &&
+      o.raised_by === next.raised_by &&
+      o.note === next.note &&
+      key(o.criteria_ids) === key(next.criteria_ids),
+  );
+}

@@ -5,10 +5,12 @@ import {
   clientCanRespond,
   daysBetween,
   isOutsideWindow,
+  isRepeatObjection,
   istDate,
   istTimestamp,
   milestoneClock,
   pipeline,
+  signedNameMatches,
   type Clock,
   type ClockMilestone,
   type ClockObjection,
@@ -242,4 +244,32 @@ describe("pipeline", () => {
     expect(names(p.recentlyDeemed)).toEqual(["deemed 14 days ago"]));
   it("lists payments due within 30 days or past due, soonest first", () =>
     expect(names(p.paymentsDue)).toEqual(["overdue", "deemed 15 days ago"]));
+});
+
+describe("signedNameMatches", () => {
+  it("matches regardless of case, spacing and Unicode form", () => {
+    expect(signedNameMatches("Meera Iyer", "Meera Iyer")).toBe(true);
+    expect(signedNameMatches("meera iyer ", "Meera Iyer")).toBe(true);
+    expect(signedNameMatches("  Meera   Iyer", "Meera Iyer")).toBe(true);
+    expect(signedNameMatches("Me\u0301era", "M\u00e9era")).toBe(true);
+  });
+  it("flags a different name or script", () => {
+    expect(signedNameMatches("Mira", "Meera Iyer")).toBe(false);
+    expect(signedNameMatches("मीरा अय्यर", "Meera Iyer")).toBe(false);
+    expect(signedNameMatches("Ananya Sen", "Dr Ananya Sen")).toBe(false);
+  });
+});
+
+describe("isRepeatObjection", () => {
+  const raised_at = new Date("2026-11-06T04:30:00Z");
+  const earlier = [{ raised_by: "Mira", note: "Badge missing.", criteria_ids: ["b", "e"], raised_at }];
+  const same = { raised_by: "Mira", note: "Badge missing.", criteria_ids: ["e", "b"] };
+  it("treats the same objection within two minutes as a repeat", () =>
+    expect(isRepeatObjection(earlier, same, new Date("2026-11-06T04:31:59Z"))).toBe(true));
+  it("lets a different note or criteria through", () => {
+    expect(isRepeatObjection(earlier, { ...same, note: "Hours cut off." }, new Date("2026-11-06T04:31:00Z"))).toBe(false);
+    expect(isRepeatObjection(earlier, { ...same, criteria_ids: ["b"] }, new Date("2026-11-06T04:31:00Z"))).toBe(false);
+  });
+  it("lets the same objection through after two minutes", () =>
+    expect(isRepeatObjection(earlier, same, new Date("2026-11-06T04:32:00Z"))).toBe(false));
 });

@@ -9,6 +9,7 @@ import {
   billingProblem,
   clientCanRespond,
   isOutsideWindow,
+  isRepeatObjection,
   istDate,
   milestoneClock,
   todayIST,
@@ -359,6 +360,9 @@ export async function clientObject(token: string, input: { name: string; note: s
   if (!criteria_ids.length) throw new UserError("Tick at least one criterion that isn't met.");
 
   const now = new Date();
+  // A double tap or retry is the same objection. Late objections leave the gate open, so this is their only guard.
+  // shortcut: two requests within milliseconds can both pass; a stored submission id would close that.
+  if (isRepeatObjection(review.objections, { raised_by: input.name, note: input.note, criteria_ids }, now)) return;
   const outside_window = isOutsideWindow(istDate(now), clock.window_end);
   await db().objections.insertOne({
     _id: new ObjectId(),
